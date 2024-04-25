@@ -1,4 +1,6 @@
-# !!! WILL CRASH IF YOU DO NOT HAVE A FOLDER NAMED "streams" AND "channels" IN THE DIRECTORY WHERE YOUR SCRIPTS ARE LOCATED !!!
+!!! WILL CRASH IF YOU DO NOT HAVE A FOLDER NAMED "streams" AND "channels" IN THE DIRECTORY WHERE YOUR SCRIPTS ARE LOCATED !!!
+
+parse.py is the only file meant to be run, parse_channels.py and parse_streams.py are drivers
 
 Credits: 
       Holodex License: https://docs.holodex.net/#section/LICENSE
@@ -9,11 +11,9 @@ pip requirements:
       inputimeout
       requests
 
-# parse.py is the only file meant to be run, parse_channels.py and parse_streams.py are drivers
-
-# The parse.py script is used to link parse_streams and parse_channels
-# Will try and run at even intervals (by default 1:00, 1:15, 1:30, 1:45, 2:00, ...)
-# File writes are done all at once, so forcibly ending the program mid parse *should* be safe, however it is still disadvised
+The parse.py script is used to link parse_streams and parse_channels
+Will try and run at even intervals (by default 1:00, 1:15, 1:30, 1:45, 2:00, ...)
+File writes are done all at once, so forcibly ending the program mid parse *should* be safe, however it is still disadvised
 
 options:
    -d <filename>
