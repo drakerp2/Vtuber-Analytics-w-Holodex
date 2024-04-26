@@ -1,6 +1,6 @@
 # Author: Drake Pearson (Drakerp2)
-# Version: 0.0.0
-# Release: 4/24/2024
+# Version: 0.0.1
+# Release: 4/25/2024
 # Git: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex
 # License: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex/blob/main/LICENSE
 # Credits: 
@@ -27,6 +27,9 @@
 #        the interval of time (in minutes) to wait in between pulling data from the Holodex server
 #        inputs that are not factors of 60 will produce unexpected behavior, but will not crash or produce errors
 #        15 by default
+#    -k <api key location>
+#        the file adress of the api key (a blank file with the key on the first line)
+#        .\..\apikeys\holodex by default
 
 
 
@@ -60,15 +63,22 @@ try: header = {"X-APIKEY": open(sys.argv[sys.argv.index("-k")+1], 'r').readline(
 except: header = {"X-APIKEY": open("./../apikeys/holodex", 'r').readline().rstrip('\n')}
 
 while(True):
+    current_time = datetime.now(timezone.utc).replace(tzinfo=None)
+    
+    print("time of parse:", str(current_time), file=debug_file)
+
     streams = parse_streams(current_time, duration_throwaway, header, debug_file)
 
     parse_channels(streams, current_time, header, debug_file)
 
     current_time = datetime.now(timezone.utc).replace(tzinfo=None)
 
+    print("Finished at", current_time, file=debug_file)
     time_to_next_parse = check_interval - (current_time.minute % check_interval) - 1
     time_to_next_parse *= 60
     time_to_next_parse += 60 - current_time.second
+    
+    print("Time to next parse", time_to_next_parse, file=debug_file)
 
     try: 
         inputimeout(prompt = "press enter to stop", timeout = time_to_next_parse)

@@ -1,6 +1,6 @@
 # Author: Drake Pearson (Drakerp2)
-# Version: 0.0.0
-# Release: 4/24/2024
+# Version: 0.0.1
+# Release: 4/25/2024
 # Git: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex
 # License: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex/blob/main/LICENSE
 # Credits: 
@@ -34,10 +34,8 @@ import requests
 # initializes the channel parsers, threading each channel parse seperately
 def parse_channels(streams, current_time, header, debug_file=sys.stdout):
     if (len(streams) == 0): return
-#    global debug_lock 
-#    debug_lock = threading.Lock()
-    
-    channels = os.listdir("./channels")
+    global debug_lock 
+    debug_lock = threading.Lock()
 
     thread_list = []
 #    thread = threading.Thread(target = append_to_channel, args=(streams[0], current_time, header, debug_file))
@@ -58,28 +56,50 @@ def parse_channels(streams, current_time, header, debug_file=sys.stdout):
 # delegates the tasks of processing the analytic data and time data respectively using the multiprocessing library
 # performs all computations before writing to any files
 def append_to_channel(filename, current_time, header, debug_file):
-    inFile = open("./streams/%s" % filename, 'r', encoding="utf-8")
-    channelID = inFile.readline().rstrip('\n') # YT channel ID
-    snapshots = [line.rstrip('\n').split('?') for line in inFile.readlines() if len(line) > 1] # {Live viewer count}?{timestamp}
+    channelID = None
+    snapshots = None
+    with open("./streams/%s" % filename, 'r', encoding="utf-8") as inFile:
+        channelID = inFile.readline().rstrip('\n') # YT channel ID
+        snapshots = [line.rstrip('\n').split('?') for line in inFile.readlines() if len(line) > 1] # {Live viewer count}?{timestamp}
     
     if (len(channelID) < 2 or len(snapshots) == 0): # error catch
-        inFile.close()
         return
     
-#    with debug_lock:
-#        print(channelID, file=debug_file)
+    with debug_lock: print("pulling channel %s" % channelID, file=debug_file)
 
-    pull = requests.get("https://holodex.net/api/v2/channels/%s" % channelID, headers = header).json()
+    pull = None
+    try: pull = requests.get("https://holodex.net/api/v2/channels/%s" % channelID, headers = header).json()
+    except: 
+        with debug_lock: print("!!! FAILED TO CONNECT TO HOLODEX !!!", file=debug_file)
+        return
     
-    outFile = open("./channels/%s" % pull["english_name"], 'a+', encoding="utf-8")
     
+   
+
+    # replaces invalid windows file characters with lookalikes
+    pull["english_name"].replace('/', '⧸')
+    pull["english_name"].replace('\u005c', '⧹')
+    pull["english_name"].replace(':', '׃')
+    pull["english_name"].replace('*', '٭')
+    pull["english_name"].replace('"', "''")
+    pull["english_name"].replace('|', '｜')
+    pull["english_name"].replace('<', '˂')
+    pull["english_name"].replace('>', '˃')
+    pull["english_name"].replace('?', '？')
+
     info = ThreadPool(processes=1)
-    if (len(outFile.read(2)) == 2):
-        info = info.apply_async(json.load, (outFile,))
-    else:
-        info = info.apply_async(initialize_channel, (pull,))
+    with open("./channels/%s" % pull["english_name"], 'a+', encoding="utf-8") as outFile:  
+        if (len(outFile.read(2)) == 2):
+            info = info.apply_async(json.load, (outFile,))
+        else:
+            info = info.apply_async(initialize_channel, (pull,))
+        
+    with debug_lock: print("pulling stream", filename, file=debug_file)
     
-    stream = requests.get("https://holodex.net/api/v2/videos/%s" % filename, headers = header).json()
+    try: stream = requests.get("https://holodex.net/api/v2/videos/%s" % filename, headers = header).json()
+    except: 
+        with debug_lock: print("!!! FAILED TO CONNECT TO HOLODEX !!!", file=debug_file)
+        return
     
     time_data = ThreadPool(processes=1)
     time_data = time_data.apply_async(get_time_data, (stream, current_time, debug_file,))
@@ -129,10 +149,9 @@ def append_to_channel(filename, current_time, header, debug_file):
     }
     del info["sys_append"]
     info["Streams"].append(stream_data)
-    outFile.truncate(0)
-    json.dump(info, outFile, indent=4, ensure_ascii=False)
-    inFile.close()
-    outFile.close()
+    with open("./channels/%s" % pull["english_name"], 'w', encoding="utf-8") as outFile:  
+        print("Writing to", pull["english_name"], file=debug_file)
+        json.dump(info, outFile, indent=4, ensure_ascii=False)
     os.remove("./streams/%s" % filename)
 
 
@@ -168,15 +187,15 @@ def calculate_analytics(info, snapshots, pull, debug_file):
     info = info.get()
     stream_count = len(info["Streams"])
     
-    info["Live Viewership"]["Stream Average"] = int((float(stream_count)/float(stream_count+1))*(float(info["Live Viewership"]["Stream Average"])) + (sys_append["stream_avg_views"]/float(stream_count+1)))
-    info["Live Viewership"]["Average Peak"] = int((float(stream_count)/float(stream_count+1))*(float(info["Live Viewership"]["Average Peak"])) + (sys_append["stream_peak_views"]/float(stream_count+1)))
+    info["Live Viewership"]["Stream Average"] = int(add_to_average(stream_count, info["Live Viewership"]["Stream Average"], sys_append["stream_avg_views"]))
+    info["Live Viewership"]["Average Peak"] = int(add_to_average(stream_count, info["Live Viewership"]["Average Peak"], sys_append["stream_peak_views"]))
 
     if (sys_append["stream_peak_views"] > info["Live Viewership"]["All Time Peak"]): 
         info["Live Viewership"]["All Time Peak"] = sys_append["stream_peak_views"]
         info["Live Viewership"]["Date of Peak"] = sys_append["date_of_peak"]
     
-    info["Live Viewers/Subscribers Ratio"]["Stream Average"] = (float(stream_count)/float(stream_count+1))*(float(info["Live Viewers/Subscribers Ratio"]["Stream Average"])) + (sys_append["stream_avg_sub_view_ratio"]/float(stream_count+1))
-    info["Live Viewers/Subscribers Ratio"]["Average Peak"] = (float(stream_count)/float(stream_count+1))*(float(info["Live Viewers/Subscribers Ratio"]["Average Peak"])) + (sys_append["stream_peak_sub_view_ratio"]/float(stream_count+1))
+    info["Live Viewers/Subscribers Ratio"]["Stream Average"] = add_to_average(stream_count, info["Live Viewers/Subscribers Ratio"]["Stream Average"], sys_append["stream_avg_sub_view_ratio"])
+    info["Live Viewers/Subscribers Ratio"]["Average Peak"] = add_to_average(stream_count, info["Live Viewers/Subscribers Ratio"]["Average Peak"], sys_append["stream_peak_sub_view_ratio"])
 
     if (sys_append["stream_peak_sub_view_ratio"] > info["Live Viewers/Subscribers Ratio"]["All Time Peak"]):
         info["Live Viewers/Subscribers Ratio"]["All Time Peak"] = sys_append["stream_peak_sub_view_ratio"]
@@ -198,7 +217,10 @@ def calculate_analytics(info, snapshots, pull, debug_file):
     
     return info
 
-
+# helper function for calulate_analytics to compute the new average based on the old one
+# A(n+1) = [ n*A(n) + x ] / [ n + 1 ]
+def add_to_average(current_count, current_average, new_value):
+    return (float(current_average)*float(current_count) + float(new_value)) / float(current_count+1)
 
 # processes the time data provided by Holodex videos API
 def get_time_data(stream, current_time, debug_file):

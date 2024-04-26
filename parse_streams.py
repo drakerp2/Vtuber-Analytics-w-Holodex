@@ -1,6 +1,6 @@
 # Author: Drake Pearson (Drakerp2)
-# Version: 0.0.0
-# Release: 4/24/2024
+# Version: 0.0.1
+# Release: 4/25/2024
 # Git: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex
 # License: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex/blob/main/LICENSE
 # Credits: 
@@ -53,10 +53,18 @@ def parse_streams(current_time, duration_throwaway, header, debug_file=sys.stdou
 
     for i in range(20): # debug limit ensureing loop does not continue forever if garbage data fails to get filtered (like that from many non-YT streams)
         
-        params["offset"] += 50
-        r = requests.get("https://holodex.net/api/v2/videos", params, headers=header)
+        
+        print("pulling videos %i-%i" % (params["offset"], params["offset"]+params["limit"]), file=debug_file)
+
+        r = None
+        try: r = requests.get("https://holodex.net/api/v2/videos", params, headers=header)
+        except: 
+            print("!!! FAILED TO CONNECT TO HOLODEX !!!", file=debug_file)
+            return []
 #        json.dump(r.json(), debug_file, indent=4, ensure_ascii=False)
         
+        params["offset"] += params["limit"]
+
         valid_streams = False
         for stream in r.json():
             thread = threading.Thread(target=append_to_stream, args=(stream, current_time, duration_throwaway, debug_file))
