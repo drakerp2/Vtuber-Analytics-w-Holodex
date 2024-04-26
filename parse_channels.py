@@ -1,6 +1,6 @@
 # Author: Drake Pearson (Drakerp2)
-# Version: 0.0.1
-# Release: 4/25/2024
+# Version: 0.0.2
+# Release: 4/26/2024
 # Git: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex
 # License: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex/blob/main/LICENSE
 # Credits: 
@@ -76,16 +76,17 @@ def append_to_channel(filename, current_time, header, debug_file):
     
    
 
+    
     # replaces invalid windows file characters with lookalikes
-    pull["english_name"].replace('/', '⧸')
-    pull["english_name"].replace('\u005c', '⧹')
-    pull["english_name"].replace(':', '׃')
-    pull["english_name"].replace('*', '٭')
-    pull["english_name"].replace('"', "''")
-    pull["english_name"].replace('|', '｜')
-    pull["english_name"].replace('<', '˂')
-    pull["english_name"].replace('>', '˃')
-    pull["english_name"].replace('?', '？')
+    pull["english_name"] = pull["english_name"].replace('/', '⧸')
+    pull["english_name"] = pull["english_name"].replace('\u005c', '⧹')
+    pull["english_name"] = pull["english_name"].replace(':', '׃')
+    pull["english_name"] = pull["english_name"].replace('*', '٭')
+    pull["english_name"] = pull["english_name"].replace('"', "''")
+    pull["english_name"] = pull["english_name"].replace('|', '｜')
+    pull["english_name"] = pull["english_name"].replace('<', '˂')
+    pull["english_name"] = pull["english_name"].replace('>', '˃')
+    pull["english_name"] = pull["english_name"].replace('?', '？')
 
     info = ThreadPool(processes=1)
     with open("./channels/%s" % pull["english_name"], 'a+', encoding="utf-8") as outFile:  
@@ -170,6 +171,7 @@ def calculate_analytics(info, snapshots, pull, debug_file):
     }
     
     for snapshot in snapshots:
+        if (len(snapshot) == 1): continue #avoids crashes due to double writes (can happen given other errors)
         viewers = int(snapshot[0])
         sys_append["stream_avg_views"] += viewers
         if (sys_append["stream_peak_views"] < viewers):
