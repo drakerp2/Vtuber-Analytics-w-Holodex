@@ -26,3 +26,6 @@ options:
        the interval of time (in minutes) to wait in between pulling data from the Holodex server
        inputs that are not factors of 60 will produce unexpected behavior, but will not crash or produce errors
        15 by default
+    -k <api key location>
+        the file adress of the api key (a blank file with the key on the first line)
+        .\..\apikeys\holodex by default
