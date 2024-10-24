@@ -1,15 +1,16 @@
 !!! WILL CRASH IF YOU DO NOT HAVE A FOLDER NAMED "streams" AND "channels" IN THE DIRECTORY WHERE YOUR SCRIPTS ARE LOCATED !!!
 
-parse.py is the only file meant to be run, parse_channels.py and parse_streams.py are drivers
+parse.py and procees_data.py are the only files meant to be run, parse_channels.py and parse_streams.py are drivers
 
 Credits: 
       Holodex License: https://docs.holodex.net/#section/LICENSE
       Holodex Homepage: https://holodex.net/
-      Oshi: Runie Ruse (Phase Connect) https://www.youtube.com/@RunieRuse
 
 pip requirements:
       inputimeout
       requests
+      xlsxwriter
+      
 
 The parse.py script is used to link parse_streams and parse_channels
 Will try and run at even intervals (by default 1:00, 1:15, 1:30, 1:45, 2:00, ...)
