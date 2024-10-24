@@ -1,6 +1,6 @@
 # Author: Drake Pearson (Drakerp2)
-# Version: 0.0.1
-# Release: 4/25/2024
+# Version: 1.0.0
+# Release: 10/24/2024
 # Git: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex
 # License: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex/blob/main/LICENSE
 # Credits: 
@@ -11,16 +11,13 @@
 # pip requirements:
 #        requests
 #
-#! Pulls a list of every active YT stream from Holodex and appends the data to files in .\streams 
-#! Returns a list of streams in .\streams that are finished
-#
+
 
 
 
 
 import threading
 from datetime import datetime
-from datetime import timedelta
 import os
 import sys
 
@@ -57,7 +54,9 @@ def parse_streams(current_time, duration_throwaway, header, debug_file=sys.stdou
         print("pulling videos %i-%i" % (params["offset"], params["offset"]+params["limit"]), file=debug_file)
 
         r = None
-        try: r = requests.get("https://holodex.net/api/v2/videos", params, headers=header)
+        try: 
+            r = requests.get("https://holodex.net/api/v2/videos", params, headers=header)
+            r = r.json()
         except: 
             print("!!! FAILED TO CONNECT TO HOLODEX !!!", file=debug_file)
             return []
@@ -66,7 +65,8 @@ def parse_streams(current_time, duration_throwaway, header, debug_file=sys.stdou
         params["offset"] += params["limit"]
 
         valid_streams = False
-        for stream in r.json():
+
+        for stream in r:
             thread = threading.Thread(target=append_to_stream, args=(stream, current_time, duration_throwaway, debug_file))
             threadList.append(thread)
             thread.start()
@@ -82,6 +82,7 @@ def parse_streams(current_time, duration_throwaway, header, debug_file=sys.stdou
 
 # driver function for the thread
 # performs all computations before writing to any files
+## todo: set up propper debug logging
 def append_to_stream(stream, current_time, duration_throwaway, debug_file):
 #  with debug_lock: # this will force each thread to be handled one at a time for debugging
 #    print(stream, file=debug_file)

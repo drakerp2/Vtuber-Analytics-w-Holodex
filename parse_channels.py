@@ -1,6 +1,6 @@
 # Author: Drake Pearson (Drakerp2)
-# Version: 0.0.2
-# Release: 4/26/2024
+# Version: 1.0.0
+# Release: 10/24/2024
 # Git: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex
 # License: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex/blob/main/LICENSE
 # Credits: 
@@ -15,14 +15,13 @@
 #! This data is then written too a file in .\channels named for the english name of the streamer (creating a new one as needed)
 #! It pulls the current analytics of the streamer from Holodex, and creates a new stream entry
 #
-
-
+# todo: group data is coming in with 2 random(ish) characters on the front, this may be coming in from holodex, needs to be investigated
+#
 
 import threading
 from multiprocessing.pool import ThreadPool
 import json
 from datetime import datetime
-from datetime import timedelta
 import os
 import sys
 
@@ -38,6 +37,11 @@ def parse_channels(streams, current_time, header, debug_file=sys.stdout):
     debug_lock = threading.Lock()
 
     thread_list = []
+
+    global lock_dict 
+    lock_dict = {}
+
+
 #    thread = threading.Thread(target = append_to_channel, args=(streams[0], current_time, header, debug_file))
 #    thread_list.append(thread)
 #    thread.start()
@@ -68,15 +72,19 @@ def append_to_channel(filename, current_time, header, debug_file):
     with debug_lock: print("pulling channel %s" % channelID, file=debug_file)
 
     pull = None
-    try: pull = requests.get("https://holodex.net/api/v2/channels/%s" % channelID, headers = header).json()
+    try: 
+        pull = requests.get("https://holodex.net/api/v2/channels/%s" % channelID, headers = header).json()
     except: 
         with debug_lock: print("!!! FAILED TO CONNECT TO HOLODEX !!!", file=debug_file)
         return
     
-    
+#    print(json.dumps(pull, indent=4, ensure_ascii=False))
    
-
+    if(pull["english_name"] == None or pull["english_name"] == ""):
+        pull["english_name"] = pull["name"]
     
+#    with debug_lock: print("appending %s" % pull["english_name"], file=debug_file)
+
     # replaces invalid windows file characters with lookalikes
     pull["english_name"] = pull["english_name"].replace('/', '⧸')
     pull["english_name"] = pull["english_name"].replace('\u005c', '⧹')
@@ -88,72 +96,98 @@ def append_to_channel(filename, current_time, header, debug_file):
     pull["english_name"] = pull["english_name"].replace('>', '˃')
     pull["english_name"] = pull["english_name"].replace('?', '？')
 
-    info = ThreadPool(processes=1)
-    with open("./channels/%s" % pull["english_name"], 'a+', encoding="utf-8") as outFile:  
-        if (len(outFile.read(2)) == 2):
-            info = info.apply_async(json.load, (outFile,))
-        else:
-            info = info.apply_async(initialize_channel, (pull,))
-        
-    with debug_lock: print("pulling stream", filename, file=debug_file)
+    if lock_dict.get(pull["english_name"]) == None: # uses a dict to keep track of thread locks for each channel, preventing errors from attempting to read a channel already being written/read
+        lock_dict[pull["english_name"]] = threading.Lock()
     
-    try: stream = requests.get("https://holodex.net/api/v2/videos/%s" % filename, headers = header).json()
-    except: 
-        with debug_lock: print("!!! FAILED TO CONNECT TO HOLODEX !!!", file=debug_file)
-        return
-    
-    time_data = ThreadPool(processes=1)
-    time_data = time_data.apply_async(get_time_data, (stream, current_time, debug_file,))
-    
-#    with debug_lock:
-#        print(json.dumps(pull, indent=4, ensure_ascii=False), file=debug_file)
-#        print(json.dumps(stream, indent=4, ensure_ascii=False), file=debug_file)
+    print("Opening", pull["english_name"], file=debug_file)
 
-    # performs basic checks to make sure Holodex API did not send any bad data
-    if (pull.get("english_name") == None): pull["english_name"] = pull["name"] 
-    if (pull["subscriber_count"] == None): pull["subscriber_count"] = 0
-    if (pull["view_count"] == None): pull["view_count"] = 0
-    if (pull["video_count"] == None): pull["video_count"] = 0
-    
-    info = calculate_analytics(info, snapshots, pull, debug_file)
-    time_data = time_data.get()
-    
-    stream_data = {
-        "Title": stream["title"],
-        "Topics": stream.get("topic_id"),
-        "Start": time_data["start"],
-        "Duration": time_data["duration"],
-        "End": time_data["end"],
-        "Tardiness": time_data["tardiness"],
-        "Prior Notice": time_data["notice"],
-        "Live Viewership": {
-            "Average": info["sys_append"]["stream_avg_views"],
-            "Peak": info["sys_append"]["stream_peak_views"],
-            "Date of Peak": info["sys_append"]["date_of_peak"],
-        },
-        "Live Viewers/Subscribers Ratio": {
-            "Average": info["sys_append"]["stream_avg_sub_view_ratio"],
-            "Peak": info["sys_append"]["stream_peak_sub_view_ratio"],
-        },
-        "Subscribers": {
-            "Current": info["Subscribers"],
-            "Gained": info["sys_append"]["delta_subs"],
-        },
-        "Views": {
-            "Current": info["Total Views"],
-            "Gained": info["sys_append"]["delta_views"],
-        },
-        "Videos": {
-            "Current": info["Videos"],
-            "Gained": info["sys_append"]["delta_videos"],
+    info = ThreadPool(processes=1)
+    with lock_dict[pull["english_name"]]:
+        outFile = open("./channels/%s" % pull["english_name"], 'a+', encoding="utf-8")
+        outFile.seek(0)
+        if (outFile.read(1) == '{'):
+            outFile.seek(0)
+            info = info.apply_async(load_json, (outFile,))
+        else:
+            print("Initializing", pull["english_name"])
+            info = info.apply_async(initialize_channel, (pull,))
+            
+        with debug_lock: print("pulling stream", filename, file=debug_file)
+        
+        try: 
+            stream = requests.get("https://holodex.net/api/v2/videos/%s" % filename, headers = header).json()
+            if stream.get("message") == ("Video id %s not found" % filename):
+                print(filename, "deleted by", pull["english_name"])
+                os.remove("./streams/%s" % filename)
+                return
+        except: 
+            with debug_lock: print("!!! FAILED TO CONNECT TO HOLODEX !!!", file=debug_file)
+            return
+        
+        time_data = ThreadPool(processes=1)
+        time_data = time_data.apply_async(get_time_data, (stream, current_time, debug_file,))
+        
+    #    with debug_lock:
+    #        print(json.dumps(pull, indent=4, ensure_ascii=False), file=debug_file)
+    #        print(json.dumps(stream, indent=4, ensure_ascii=False), file=debug_file)
+
+        # performs basic checks to make sure Holodex API did not send any bad data
+        if (pull["subscriber_count"] == None): pull["subscriber_count"] = 0
+        if (pull["view_count"] == None): pull["view_count"] = 0
+        if (pull["video_count"] == None): pull["video_count"] = 0
+        
+        info = calculate_analytics(info, snapshots, pull, debug_file)
+        time_data = time_data.get()
+        
+        stream_data = {
+            "Title": stream["title"],
+            "Topics": stream.get("topic_id"),
+            "Start": time_data["start"],
+            "Duration": time_data["duration"],
+            "End": time_data["end"],
+            "Tardiness": time_data["tardiness"],
+            "Prior Notice": time_data["notice"],
+            "Live Viewership": {
+                "Average": info["sys_append"]["stream_avg_views"],
+                "Peak": info["sys_append"]["stream_peak_views"],
+                "Date of Peak": info["sys_append"]["date_of_peak"],
+            },
+            "Live Viewers/Subscribers Ratio": {
+                "Average": info["sys_append"]["stream_avg_sub_view_ratio"],
+                "Peak": info["sys_append"]["stream_peak_sub_view_ratio"],
+            },
+            "Subscribers": {
+                "Current": info["Subscribers"],
+                "Gained": info["sys_append"]["delta_subs"],
+            },
+            "Views": {
+                "Current": info["Total Views"],
+                "Gained": info["sys_append"]["delta_views"],
+            },
+            "Videos": {
+                "Current": info["Videos"],
+                "Gained": info["sys_append"]["delta_videos"],
+            }
         }
-    }
-    del info["sys_append"]
-    info["Streams"].append(stream_data)
-    with open("./channels/%s" % pull["english_name"], 'w', encoding="utf-8") as outFile:  
-        print("Writing to", pull["english_name"], file=debug_file)
-        json.dump(info, outFile, indent=4, ensure_ascii=False)
-    os.remove("./streams/%s" % filename)
+        del info["sys_append"]
+        info["Streams"].append(stream_data)
+        with open("./channels/%s" % pull["english_name"], 'w', encoding="utf-8") as outFile:  
+            print("Performing physical write on", pull["english_name"], file=debug_file)
+            json.dump(info, outFile, indent=4, ensure_ascii=False)
+        os.remove("./streams/%s" % filename)
+
+
+
+def load_json(outFile):
+    ret = None
+    try:
+        ret = json.load(outFile)
+    except json.JSONDecodeError:
+        pos = outFile.tell()
+        outFile.seek(pos-1)
+        
+        print("!!!!!!" + str(pos) + " !!! " + str(outFile.read(5)) + " !!!!!!")
+    return ret
 
 
 
@@ -184,7 +218,6 @@ def calculate_analytics(info, snapshots, pull, debug_file):
     except: None
     try: sys_append["stream_peak_sub_view_ratio"] = float(sys_append["stream_peak_views"])/int(pull["subscriber_count"])
     except: None
-    
     
     info = info.get()
     stream_count = len(info["Streams"])
@@ -236,7 +269,10 @@ def get_time_data(stream, current_time, debug_file):
     if (published_at == None): published_at = start_scheduled # Occurs for guerilla streams
     if (end_actual == None): end_actual = current_time # I don't think this is possible, but prevents errors just in case
     else: end_actual = datetime.fromisoformat(str(end_actual)).replace(tzinfo=None)
-    start_actual = datetime.fromisoformat(start_actual).replace(tzinfo=None)
+    try:
+        start_actual = datetime.fromisoformat(start_actual).replace(tzinfo=None)
+    except: 
+        print(start_actual)
     start_scheduled = datetime.fromisoformat(str(start_scheduled)).replace(tzinfo=None)
     published_at = datetime.fromisoformat(str(published_at)).replace(tzinfo=None)
     
@@ -259,13 +295,13 @@ def get_time_data(stream, current_time, debug_file):
 
 # creates the channel template for new channels
 def initialize_channel(pull):
-    return {
+    ret = {
         "Channel Name": pull["name"],
         "Channel ID": pull["id"],
         "Type": pull["type"],
         "Affiliation": {
             "Organization": pull.get("org"),
-            "Group": pull.get("suborg"),
+            "Group": pull.get("suborg")
         },
         "Total Views": pull["view_count"],
         "Subscribers": pull["subscriber_count"],
@@ -274,15 +310,16 @@ def initialize_channel(pull):
             "Stream Average": 0,
             "Average Peak": 0,
             "All Time Peak": 0,
-            "Date of Peak": None,
+            "Date of Peak": None
         },
         "Live Viewers/Subscribers Ratio": { 
             "Stream Average": 0,
             "Average Peak": 0,
             "All Time Peak": 0,
             "Subscribers at Peak": 0,
-            "Date of Peak": None,
+            "Date of Peak": None
         },
-        "Streams": [],
+        "Streams": []
     }
+    return ret
     

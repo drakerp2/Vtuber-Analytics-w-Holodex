@@ -1,6 +1,6 @@
 # Author: Drake Pearson (Drakerp2)
-# Version: 0.0.1
-# Release: 4/25/2024
+# Version: 1.0.0
+# Release: 10/24/2024
 # Git: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex
 # License: https://github.com/drakerp2/Vtuber-Analytics-w-Holodex/blob/main/LICENSE
 # Credits: 
@@ -64,7 +64,7 @@ except: header = {"X-APIKEY": open("./../apikeys/holodex", 'r').readline().rstri
 
 while(True):
     current_time = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+
     print("time of parse:", str(current_time), file=debug_file)
 
     streams = parse_streams(current_time, duration_throwaway, header, debug_file)
